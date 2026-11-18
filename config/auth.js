@@ -24,10 +24,44 @@ export const auth = betterAuth({
     minPasswordLength: 6,
   },
 
+
+
+hooks: {
+  before: createAuthMiddleware(async (ctx) => {
+    if (ctx.path !== "/sign-up/email") {
+      return;
+    }
+
+    const password = ctx.body?.password;
+
+    if (
+      typeof password !== "string" ||
+      password.length < 6
+    ) {
+      throw new APIError("BAD_REQUEST", {
+        message: "Password must be at least 6 characters",
+      });
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      throw new APIError("BAD_REQUEST", {
+        message: "Password must contain an uppercase letter",
+      });
+    }
+
+    if (!/[a-z]/.test(password)) {
+      throw new APIError("BAD_REQUEST", {
+        message: "Password must contain a lowercase letter",
+      });
+    }
+  }),
+},
+
+
   user: {
     additionalFields: {
       role: {
-        type: ["customer", "vendor"],
+      type: ["customer", "vendor", "admin"],
         required: false,
         defaultValue: "customer",
         input: true,

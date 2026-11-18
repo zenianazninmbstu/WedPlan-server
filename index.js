@@ -6,6 +6,7 @@ import { toNodeHandler } from "better-auth/node";
 import { connectDB } from "./config/db.js";
 import { auth } from "./config/auth.js";
 import { verifyToken } from "./middleware/verifyToken.js";
+import userRoutes from "./routes/userRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -24,6 +25,8 @@ app.all("/api/auth/*splat", toNodeHandler(auth));
 
 // Body parser
 app.use(express.json());
+
+app.use("/api/users", userRoutes);
 
 // Protected test route
 app.get("/api/protected", verifyToken, (req, res) => {
