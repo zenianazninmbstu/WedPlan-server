@@ -177,3 +177,117 @@ export const deleteService = async (req, res) => {
     });
   }
 };
+
+export const getVendorServices = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const services = await db.collection("services")
+      .find({ vendorId: req.user.sub })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      totalServices: services.length,
+      services,
+    });
+  } catch (error) {
+    console.error("Get vendor services failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve vendor services",
+    });
+  }
+};
+
+export const createService = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const {
+      name,
+      description,
+      category,
+      price,
+      location,
+      images,
+    } = req.body;
+
+    const allowedCategories = [
+      "Photography & Videography",
+      "Wedding Venues",
+      "Decoration & Florist",
+      "Catering Services",
+      "Makeup & Styling",
+      "Wedding Fashion",
+    ];
+
+    if (
+      !name?.trim() ||
+      !description?.trim() ||
+      !category ||
+      !location?.trim()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be provided",
+      });
+    }
+
+    if (!allowedCategories.includes(category)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid service category",
+      });
+    }
+
+    if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Price must be a positive number",
+      });
+    }
+
+    if (
+      !Array.isArray(images) ||
+      images.length === 0 ||
+      !images.every((image) => typeof image === "string" && image.trim())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one valid service image is required",
+      });
+    }
+
+    const newService = {
+      name: name.trim(),
+      description: description.trim(),
+      category,
+      price,
+      location: location.trim(),
+      images,
+      vendorId: req.user.sub,
+      status: "pending",
+      isActive: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const result = await db.collection("services").insertOne(newService);
+
+    res.status(201).json({
+      success: true,
+      message: "Service submitted for admin approval",
+      serviceId: result.insertedId,
+    });
+  } catch (error) {
+    console.error("Create service failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to create service",
+    });
+  }
+};

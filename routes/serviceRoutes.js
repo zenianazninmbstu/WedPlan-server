@@ -6,11 +6,21 @@ import {
   updateServiceStatus,
   updateServiceVisibility,
    deleteService,
+   getVendorServices,
+   createService,
 } from "../controllers/serviceController.js";
 
 
 
 const router = express.Router();
+
+// Create a new service (Vendor only)
+router.post(
+  "/",
+  verifyToken,
+  verifyRole("vendor"),
+  createService
+);
 
 // Get pending services (Admin only)
 router.get(
@@ -42,6 +52,15 @@ router.delete(
   verifyToken,
   verifyRole("admin"),
   deleteService
+);
+
+
+  // Get vendor's own services (Vendor only)
+router.get(
+  "/vendor/my-services",
+  verifyToken,
+  verifyRole("vendor"),
+  getVendorServices
 );
 
 export default router;
