@@ -61,3 +61,59 @@ export const getAllUsers = async (req, res) => {
     });
   }
 };
+
+export const updateUserStatus = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+    const { userId } = req.params;
+    
+    if (userId === req.user.sub && isBlocked === true) {
+  return res.status(403).json({
+    success: false,
+    message: "You cannot block your own account",
+  });
+}
+    const { isBlocked } = req.body;
+
+    if (typeof isBlocked !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "isBlocked must be true or false",
+      });
+    }
+
+    const result = await db.collection("user").updateOne(
+      {
+        id: userId,
+        role: { $in: ["customer", "vendor"] },
+      },
+      {
+        $set: {
+          isBlocked,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: isBlocked
+        ? "User blocked successfully"
+        : "User unblocked successfully",
+    });
+  } catch (error) {
+    console.error("Update user status failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update user status",
+    });
+  }
+};
