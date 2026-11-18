@@ -8,25 +8,29 @@ export const createBooking = async (req, res) => {
     const { serviceId, eventDate, eventLocation, message } = req.body;
 
     if (
-      !ObjectId.isValid(serviceId) ||
-      !eventDate ||
-      !eventLocation?.trim() ||
-      !message?.trim()
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "All booking fields are required",
-      });
-    }
+  !ObjectId.isValid(serviceId) ||
+  typeof eventLocation !== "string" ||
+  !eventLocation.trim() ||
+  typeof message !== "string" ||
+  !message.trim() ||
+  typeof eventDate !== "string" ||
+  !eventDate
+) {
+  return res.status(400).json({
+    success: false,
+    message: "All booking fields are required",
+  });
+}
 
     const datePattern = /^\d{4}-\d{2}-\d{2}$/;
     const parsedDate = new Date(`${eventDate}T00:00:00.000Z`);
-
+    const today = new Date().toISOString().slice(0, 10);
     if (
       typeof eventDate !== "string" ||
       !datePattern.test(eventDate) ||
       Number.isNaN(parsedDate.getTime()) ||
-      parsedDate.toISOString().slice(0, 10) !== eventDate
+      parsedDate.toISOString().slice(0, 10) !== eventDate ||
+      eventDate < today
     ) {
       return res.status(400).json({
         success: false,
@@ -68,6 +72,21 @@ export const createBooking = async (req, res) => {
       });
     }
 
+
+    if (message.trim().length > 1000) {
+  return res.status(400).json({
+    success: false,
+    message: "Booking message cannot exceed 1000 characters",
+  });
+}
+
+if (eventLocation.trim().length > 300) {
+  return res.status(400).json({
+    success: false,
+    message: "Event location cannot exceed 300 characters",
+  });
+}
+
     const newBooking = {
       serviceId: new ObjectId(serviceId),
       vendorId: service.vendorId,
@@ -93,6 +112,206 @@ export const createBooking = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to create booking",
+    });
+  }
+};
+
+export const getCustomerBookings = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const bookings = await db.collection("bookings")
+      .aggregate([
+        {
+          $match: {
+            customerId: req.user.sub,
+          },
+        },
+        {
+          $lookup: {
+            from: "services",
+            localField: "serviceId",
+            foreignField: "_id",
+            as: "service",
+          },
+        },
+        {
+          $unwind: {
+            path: "$service",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $sort: {
+            createdAt: -1,
+          },
+        },
+      ])
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      totalBookings: bookings.length,
+      bookings,
+    });
+  } catch (error) {
+    console.error("Get customer bookings failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve bookings",
+    });
+  }
+};
+
+export const cancelBooking = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const { bookingId } = req.params;
+
+    if (!ObjectId.isValid(bookingId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid booking ID",
+      });
+    }
+
+    const result = await db.collection("bookings").updateOne(
+      {
+        _id: new ObjectId(bookingId),
+        customerId: req.user.sub,
+        status: "pending",
+      },
+      {
+        $set: {
+          status: "cancelled",
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Pending booking not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Booking cancelled successfully",
+    });
+  } catch (error) {
+    console.error("Cancel booking failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to cancel booking",
+    });
+  }
+};
+
+export const getVendorBookings = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const bookings = await db.collection("bookings")
+      .aggregate([
+        {
+          $match: {
+            vendorId: req.user.sub,
+          },
+        },
+        {
+          $lookup: {
+            from: "services",
+            localField: "serviceId",
+            foreignField: "_id",
+            as: "service",
+          },
+        },
+        {
+          $unwind: {
+            path: "$service",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $sort: {
+            createdAt: -1,
+          },
+        },
+      ])
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      totalBookings: bookings.length,
+      bookings,
+    });
+  } catch (error) {
+    console.error("Get vendor bookings failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve booking requests",
+    });
+  }
+};
+
+export const updateBookingStatus = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const { bookingId } = req.params;
+    const { status } = req.body;
+
+    if (!ObjectId.isValid(bookingId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid booking ID",
+      });
+    }
+
+    if (!["accepted", "rejected"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status must be accepted or rejected",
+      });
+    }
+
+    const result = await db.collection("bookings").updateOne(
+      {
+        _id: new ObjectId(bookingId),
+        vendorId: req.user.sub,
+        status: "pending",
+      },
+      {
+        $set: {
+          status,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Pending booking request not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Booking ${status} successfully`,
+    });
+  } catch (error) {
+    console.error("Update booking status failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update booking status",
     });
   }
 };

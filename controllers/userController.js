@@ -66,13 +66,8 @@ export const updateUserStatus = async (req, res) => {
   try {
     const db = client.db(process.env.DB_NAME);
     const { userId } = req.params;
-    
-    if (userId === req.user.sub && isBlocked === true) {
-  return res.status(403).json({
-    success: false,
-    message: "You cannot block your own account",
-  });
-}
+
+
     const { isBlocked } = req.body;
 
     if (typeof isBlocked !== "boolean") {
@@ -81,6 +76,14 @@ export const updateUserStatus = async (req, res) => {
         message: "isBlocked must be true or false",
       });
     }
+    
+    if (userId === req.user.sub && isBlocked === true) {
+  return res.status(403).json({
+    success: false,
+    message: "You cannot block your own account",
+  });
+}
+    
 
     const result = await db.collection("user").updateOne(
       {
@@ -114,6 +117,49 @@ export const updateUserStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update user status",
+    });
+  }
+};
+
+export const getMyProfile = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const user = await db.collection("user").findOne(
+      { id: req.user.sub },
+      {
+        projection: {
+          _id: 0,
+          id: 1,
+          name: 1,
+          email: 1,
+          image: 1,
+          role: 1,
+          businessName: 1,
+          subscriptionPlan: 1,
+          subscriptionExpiresAt: 1,
+          createdAt: 1,
+        },
+      }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User profile not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      user,
+    });
+  } catch (error) {
+    console.error("Get profile failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve profile",
     });
   }
 };

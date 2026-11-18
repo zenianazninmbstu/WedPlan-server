@@ -8,6 +8,7 @@ import { auth } from "./config/auth.js";
 import { verifyToken } from "./middleware/verifyToken.js";
 import userRoutes from "./routes/userRoutes.js";
 import serviceRoutes from "./routes/serviceRoutes.js";
+import bookingRoutes from "./routes/bookingRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,6 +39,9 @@ app.get("/api/protected", verifyToken, (req, res) => {
     user: req.user,
   });
 });
+
+// Booking routes
+app.use("/api/bookings", bookingRoutes);
 
 // Default route
 app.get("/", (req, res) => {
