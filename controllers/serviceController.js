@@ -82,3 +82,60 @@ export const updateServiceStatus = async (req, res) => {
     });
   }
 };
+
+export const updateServiceVisibility = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const { serviceId } = req.params;
+    const { isActive } = req.body;
+
+    if (!ObjectId.isValid(serviceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid service ID",
+      });
+    }
+
+    if (typeof isActive !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "isActive must be true or false",
+      });
+    }
+
+    const result = await db.collection("services").updateOne(
+      {
+        _id: new ObjectId(serviceId),
+        status: "approved",
+      },
+      {
+        $set: {
+          isActive,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Approved service not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: isActive
+        ? "Service published successfully"
+        : "Service unpublished successfully",
+    });
+  } catch (error) {
+    console.error("Update service visibility failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update service visibility",
+    });
+  }
+};
