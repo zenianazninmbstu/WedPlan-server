@@ -7,6 +7,7 @@ import { connectDB } from "./config/db.js";
 import { auth } from "./config/auth.js";
 import { verifyToken } from "./middleware/verifyToken.js";
 import userRoutes from "./routes/userRoutes.js";
+import serviceRoutes from "./routes/serviceRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -27,6 +28,7 @@ app.all("/api/auth/*splat", toNodeHandler(auth));
 app.use(express.json());
 
 app.use("/api/users", userRoutes);
+app.use("/api/services", serviceRoutes);
 
 // Protected test route
 app.get("/api/protected", verifyToken, (req, res) => {
