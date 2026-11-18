@@ -104,7 +104,53 @@ export const updateServiceVisibility = async (req, res) => {
       });
     }
 
-    const result = await db.collection("services").updateOne(
+    const service = await db.collection("services").findOne({
+      _id: new ObjectId(serviceId),
+      status: "approved",
+    });
+
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: "Approved service not found",
+      });
+    }
+
+    // Check the vendor's subscription before publishing
+    if (isActive && !service.isActive) {
+      const vendor = await db.collection("user").findOne({
+        id: service.vendorId,
+      });
+
+      if (!vendor) {
+        return res.status(404).json({
+          success: false,
+          message: "Service vendor not found",
+        });
+      }
+
+      const isPremium =
+        vendor.subscriptionPlan === "premium" &&
+        vendor.subscriptionExpiresAt &&
+        new Date(vendor.subscriptionExpiresAt) > new Date();
+
+      if (!isPremium) {
+        const activeServices = await db.collection("services").countDocuments({
+          vendorId: service.vendorId,
+          status: "approved",
+          isActive: true,
+        });
+
+        if (activeServices >= 3) {
+          return res.status(403).json({
+            success: false,
+            message: "Free vendors can have only 3 active services. Upgrade to Premium for unlimited services.",
+          });
+        }
+      }
+    }
+
+    await db.collection("services").updateOne(
       {
         _id: new ObjectId(serviceId),
         status: "approved",
@@ -116,13 +162,6 @@ export const updateServiceVisibility = async (req, res) => {
         },
       }
     );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Approved service not found",
-      });
-    }
 
     res.status(200).json({
       success: true,
@@ -428,6 +467,105 @@ export const deleteVendorService = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to delete your service",
+    });
+  }
+};
+
+export const getPublicServices = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const { search, category, location, sort } = req.query;
+
+    const filter = {
+      status: "approved",
+      isActive: true,
+    };
+
+    if (search) {
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+      filter.name = {
+        $regex: safeSearch,
+        $options: "i",
+      };
+    }
+
+    if (category) {
+      filter.category = category;
+    }
+
+    if (location) {
+      filter.location = {
+        $regex: location,
+        $options: "i",
+      };
+    }
+
+    let sortOption = { createdAt: -1 };
+
+    if (sort === "price-asc") {
+      sortOption = { price: 1 };
+    } else if (sort === "price-desc") {
+      sortOption = { price: -1 };
+    }
+
+    const services = await db.collection("services")
+      .find(filter)
+      .sort(sortOption)
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      totalServices: services.length,
+      services,
+    });
+  } catch (error) {
+    console.error("Get public services failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve services",
+    });
+  }
+};
+
+export const getPublicServiceDetails = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const { serviceId } = req.params;
+
+    if (!ObjectId.isValid(serviceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid service ID",
+      });
+    }
+
+    const service = await db.collection("services").findOne({
+      _id: new ObjectId(serviceId),
+      status: "approved",
+      isActive: true,
+    });
+
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: "Service not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      service,
+    });
+  } catch (error) {
+    console.error("Get public service details failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve service details",
     });
   }
 };

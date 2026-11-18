@@ -10,11 +10,25 @@ import {
    createService,
    updateVendorService,
    deleteVendorService,
+     getPublicServices,
+     getPublicServiceDetails,
 } from "../controllers/serviceController.js";
 
 
 
 const router = express.Router();
+
+// Get all public services
+router.get(
+  "/",
+  getPublicServices
+);
+
+// Get public service details
+router.get(
+  "/:serviceId",
+  getPublicServiceDetails
+);
 
 // Update own service (Vendor only)
 router.patch(
