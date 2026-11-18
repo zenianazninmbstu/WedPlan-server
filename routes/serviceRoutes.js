@@ -8,11 +8,21 @@ import {
    deleteService,
    getVendorServices,
    createService,
+   updateVendorService,
+   deleteVendorService,
 } from "../controllers/serviceController.js";
 
 
 
 const router = express.Router();
+
+// Update own service (Vendor only)
+router.patch(
+  "/vendor/:serviceId",
+  verifyToken,
+  verifyRole("vendor"),
+  updateVendorService
+);
 
 // Create a new service (Vendor only)
 router.post(
@@ -28,6 +38,14 @@ router.get(
   verifyToken,
   verifyRole("admin"),
   getPendingServices
+);
+
+// Delete own service (Vendor only)
+router.delete(
+  "/vendor/:serviceId",
+  verifyToken,
+  verifyRole("vendor"),
+  deleteVendorService
 );
 
 // Approve or reject a service (Admin only)

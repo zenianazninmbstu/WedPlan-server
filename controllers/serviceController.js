@@ -291,3 +291,143 @@ export const createService = async (req, res) => {
     });
   }
 };
+
+export const updateVendorService = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const { serviceId } = req.params;
+    const {
+      name,
+      description,
+      category,
+      price,
+      location,
+      images,
+    } = req.body;
+
+    const allowedCategories = [
+      "Photography & Videography",
+      "Wedding Venues",
+      "Decoration & Florist",
+      "Catering Services",
+      "Makeup & Styling",
+      "Wedding Fashion",
+    ];
+
+    if (!ObjectId.isValid(serviceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid service ID",
+      });
+    }
+
+    if (
+      !name?.trim() ||
+      !description?.trim() ||
+      !location?.trim() ||
+      !allowedCategories.includes(category)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide valid service information",
+      });
+    }
+
+    if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Price must be a positive number",
+      });
+    }
+
+    if (
+      !Array.isArray(images) ||
+      images.length === 0 ||
+      !images.every((image) => typeof image === "string" && image.trim())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one valid service image is required",
+      });
+    }
+
+    const result = await db.collection("services").updateOne(
+      {
+        _id: new ObjectId(serviceId),
+        vendorId: req.user.sub,
+      },
+      {
+        $set: {
+          name: name.trim(),
+          description: description.trim(),
+          category,
+          price,
+          location: location.trim(),
+          images,
+          status: "pending",
+          isActive: false,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Your service was not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Service updated and submitted for approval",
+    });
+  } catch (error) {
+    console.error("Update vendor service failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update service",
+    });
+  }
+};
+
+export const deleteVendorService = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const { serviceId } = req.params;
+
+    if (!ObjectId.isValid(serviceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid service ID",
+      });
+    }
+
+    const result = await db.collection("services").deleteOne({
+      _id: new ObjectId(serviceId),
+      vendorId: req.user.sub,
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Your service was not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Your service deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete vendor service failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete your service",
+    });
+  }
+};
