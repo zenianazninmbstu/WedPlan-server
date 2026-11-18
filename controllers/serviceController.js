@@ -475,7 +475,7 @@ export const getPublicServices = async (req, res) => {
   try {
     const db = client.db(process.env.DB_NAME);
 
-    const { search, category, location, sort } = req.query;
+    const { search, category, location, sort, limit } = req.query;
 
     const filter = {
       status: "approved",
@@ -504,16 +504,28 @@ export const getPublicServices = async (req, res) => {
 
     let sortOption = { createdAt: -1 };
 
+    const queryLimit = Number(limit);
+
+const limitOption =
+  Number.isInteger(queryLimit) && queryLimit > 0
+    ? Math.min(queryLimit, 50)
+    : 0;
+
     if (sort === "price-asc") {
       sortOption = { price: 1 };
     } else if (sort === "price-desc") {
       sortOption = { price: -1 };
     }
 
-    const services = await db.collection("services")
-      .find(filter)
-      .sort(sortOption)
-      .toArray();
+   let servicesQuery = db.collection("services")
+  .find(filter)
+  .sort(sortOption);
+
+if (limitOption > 0) {
+  servicesQuery = servicesQuery.limit(limitOption);
+}
+
+const services = await servicesQuery.toArray();
 
     res.status(200).json({
       success: true,
