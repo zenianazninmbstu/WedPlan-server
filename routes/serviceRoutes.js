@@ -5,6 +5,7 @@ import {
   getPendingServices,
   updateServiceStatus,
   updateServiceVisibility,
+   deleteService,
 } from "../controllers/serviceController.js";
 
 
@@ -33,6 +34,14 @@ router.patch(
   verifyToken,
   verifyRole("admin"),
   updateServiceVisibility
+);
+
+// Delete a service (Admin only)
+router.delete(
+  "/:serviceId",
+  verifyToken,
+  verifyRole("admin"),
+  deleteService
 );
 
 export default router;

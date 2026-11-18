@@ -139,3 +139,41 @@ export const updateServiceVisibility = async (req, res) => {
     });
   }
 };
+
+export const deleteService = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const { serviceId } = req.params;
+
+    if (!ObjectId.isValid(serviceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid service ID",
+      });
+    }
+
+    const result = await db.collection("services").deleteOne({
+      _id: new ObjectId(serviceId),
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Service not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Service deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete service failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete service",
+    });
+  }
+};
