@@ -163,3 +163,83 @@ export const getMyProfile = async (req, res) => {
     });
   }
 };
+
+
+export const updateMyProfile = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const { name, image, businessName } = req.body;
+
+    const updateData = {};
+
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Name is required",
+        });
+      }
+
+      updateData.name = name.trim();
+    }
+
+    if (image !== undefined) {
+      if (typeof image !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid profile image",
+        });
+      }
+
+      updateData.image = image.trim();
+    }
+
+    if (businessName !== undefined) {
+      if (
+        typeof businessName !== "string" ||
+        !businessName.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Business name is required",
+        });
+      }
+
+      updateData.businessName = businessName.trim();
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No profile information provided",
+      });
+    }
+
+    updateData.updatedAt = new Date();
+
+    const result = await db.collection("user").updateOne(
+      { id: req.user.sub },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User profile not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+    });
+  } catch (error) {
+    console.error("Update profile failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update profile",
+    });
+  }
+};

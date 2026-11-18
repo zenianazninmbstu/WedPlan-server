@@ -2,7 +2,8 @@ import express from "express";
 import {
   getAllUsers,
   updateUserStatus,
-    getMyProfile,
+  getMyProfile,
+  updateMyProfile,
 } from "../controllers/userController.js";
 import { verifyToken } from "../middleware/verifyToken.js";
 import { verifyRole } from "../middleware/verifyRole.js";
@@ -19,6 +20,13 @@ router.get(
   "/me",
   verifyToken,
   getMyProfile
+);
+
+// Update logged-in user's profile
+router.patch(
+  "/me",
+  verifyToken,
+  updateMyProfile
 );
 
 router.patch(

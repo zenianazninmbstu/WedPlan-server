@@ -9,6 +9,8 @@ import { verifyToken } from "./middleware/verifyToken.js";
 import userRoutes from "./routes/userRoutes.js";
 import serviceRoutes from "./routes/serviceRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
+import { handleStripeWebhook } from "./controllers/paymentController.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -22,12 +24,18 @@ app.use(
   })
 );
 
-// Better Auth route (must be before express.json)
+// Better Auth route
 app.all("/api/auth/*splat", toNodeHandler(auth));
+
+// Stripe webhook route (must use raw body)
+app.post(
+  "/api/payments/webhook",
+  express.raw({ type: "application/json" }),
+  handleStripeWebhook
+);
 
 // Body parser
 app.use(express.json());
-
 app.use("/api/users", userRoutes);
 app.use("/api/services", serviceRoutes);
 
@@ -42,6 +50,8 @@ app.get("/api/protected", verifyToken, (req, res) => {
 
 // Booking routes
 app.use("/api/bookings", bookingRoutes);
+
+app.use("/api/payments", paymentRoutes);
 
 // Default route
 app.get("/", (req, res) => {
