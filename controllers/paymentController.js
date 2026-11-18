@@ -55,8 +55,13 @@ export const createCheckoutSession = async (req, res) => {
         },
       ],
       metadata: {
-        userId: user.id,
-      },
+  userId: user.id,
+},
+subscription_data: {
+  metadata: {
+    userId: user.id,
+  },
+},
       success_url: `${process.env.CLIENT_URL}/dashboard/vendor?payment=success`,
       cancel_url: `${process.env.CLIENT_URL}/dashboard/vendor?payment=cancelled`,
     });
@@ -120,6 +125,8 @@ export const handleStripeWebhook = async (req, res) => {
 
       const db = client.db(process.env.DB_NAME);
 
+      const transactionsCollection = db.collection("transactions");
+
       await db.collection("user").updateOne(
         {
           id: userId,
@@ -137,6 +144,85 @@ export const handleStripeWebhook = async (req, res) => {
           },
         }
       );
+            await transactionsCollection.updateOne(
+        {
+          stripeSessionId: session.id,
+        },
+        {
+          $setOnInsert: {
+            vendorId: userId,
+            stripeSessionId: session.id,
+            stripeSubscriptionId: subscriptionId,
+            stripeCustomerId: session.customer,
+            amount: (session.amount_total || 0) / 100,
+            currency: session.currency,
+            paymentStatus: session.payment_status,
+            status:
+              session.payment_status === "paid"
+                ? "paid"
+                : "pending",
+            createdAt: new Date(),
+          },
+        },
+        {
+          upsert: true,
+        }
+      );
+    }
+
+        if (event.type === "customer.subscription.deleted") {
+      const subscription = event.data.object;
+      const userId = subscription.metadata?.userId;
+
+      if (userId) {
+        const db = client.db(process.env.DB_NAME);
+
+        await db.collection("user").updateOne(
+          {
+            id: userId,
+            role: "vendor",
+            stripeSubscriptionId: subscription.id,
+          },
+          {
+            $set: {
+              subscriptionPlan: "free",
+              subscriptionExpiresAt: null,
+              updatedAt: new Date(),
+            },
+          }
+        );
+      }
+    }
+
+
+        if (event.type === "customer.subscription.updated") {
+      const subscription = event.data.object;
+      const userId = subscription.metadata?.userId;
+
+      if (userId) {
+        const isActive =
+          subscription.status === "active" ||
+          subscription.status === "trialing";
+
+        await client.db(process.env.DB_NAME)
+          .collection("user")
+          .updateOne(
+            {
+              id: userId,
+              role: "vendor",
+              stripeSubscriptionId: subscription.id,
+            },
+            {
+              $set: {
+                subscriptionPlan: isActive ? "premium" : "free",
+                subscriptionExpiresAt: isActive
+                  ? new Date(subscription.current_period_end * 1000)
+                  : null,
+                updatedAt: new Date(),
+              },
+            }
+          );
+      }
     }
 
     res.status(200).json({ received: true });
@@ -146,6 +232,31 @@ export const handleStripeWebhook = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Webhook processing failed",
+    });
+  }
+};
+
+export const getAllTransactions = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const transactions = await db
+      .collection("transactions")
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.status(200).json({
+      success: true,
+      total: transactions.length,
+      transactions,
+    });
+  } catch (error) {
+    console.error("Get transactions failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to get transactions",
     });
   }
 };
