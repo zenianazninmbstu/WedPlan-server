@@ -11,6 +11,7 @@ import serviceRoutes from "./routes/serviceRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import { handleStripeWebhook } from "./controllers/paymentController.js";
+import uploadRoutes from "./routes/uploadRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -50,7 +51,7 @@ app.get("/api/protected", verifyToken, (req, res) => {
 
 // Booking routes
 app.use("/api/bookings", bookingRoutes);
-
+app.use("/api/uploads", uploadRoutes);
 app.use("/api/payments", paymentRoutes);
 
 // Default route
