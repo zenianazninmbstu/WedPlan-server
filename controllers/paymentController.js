@@ -225,6 +225,40 @@ export const handleStripeWebhook = async (req, res) => {
       }
     }
 
+
+        if (event.type === "invoice.paid") {
+      const invoice = event.data.object;
+      const subscriptionId = invoice.subscription;
+
+      if (subscriptionId) {
+        const db = client.db(process.env.DB_NAME);
+
+        const user = await db.collection("user").findOne({
+          stripeSubscriptionId: subscriptionId,
+          role: "vendor",
+        });
+
+        if (user) {
+          await db.collection("transactions").updateOne(
+            { stripeInvoiceId: invoice.id },
+            {
+              $setOnInsert: {
+                vendorId: user.id,
+                stripeInvoiceId: invoice.id,
+                stripeSubscriptionId: subscriptionId,
+                amount: invoice.amount_paid / 100,
+                currency: invoice.currency,
+                paymentStatus: "paid",
+                status: "paid",
+                createdAt: new Date(),
+              },
+            },
+            { upsert: true }
+          );
+        }
+      }
+    }
+
     res.status(200).json({ received: true });
   } catch (error) {
     console.error("Webhook processing failed:", error.message);
