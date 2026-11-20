@@ -118,9 +118,11 @@ export const updateServiceVisibility = async (req, res) => {
 
     // Check the vendor's subscription before publishing
     if (isActive && !service.isActive) {
-      const vendor = await db.collection("user").findOne({
-        id: service.vendorId,
-      });
+      const vendor = ObjectId.isValid(service.vendorId)
+  ? await db.collection("user").findOne({
+      _id: new ObjectId(service.vendorId),
+    })
+  : null;
 
       if (!vendor) {
         return res.status(404).json({
@@ -483,7 +485,7 @@ export const getPublicServices = async (req, res) => {
     };
 
     if (search) {
-      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+     const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
       filter.name = {
         $regex: safeSearch,
@@ -527,11 +529,41 @@ if (limitOption > 0) {
 
 const services = await servicesQuery.toArray();
 
-    res.status(200).json({
-      success: true,
-      totalServices: services.length,
-      services,
-    });
+
+const servicesWithVendor = await Promise.all(
+  services.map(async (service) => {
+   const vendor = ObjectId.isValid(service.vendorId)
+  ? await db.collection("user").findOne(
+      { _id: new ObjectId(service.vendorId) },
+      {
+        projection: {
+          _id: 0,
+          name: 1,
+          businessName: 1,
+          image: 1,
+        },
+      }
+    )
+  : null;
+
+    return {
+      ...service,
+      vendor: vendor
+        ? {
+            name: vendor.name || "Wedding Vendor",
+            businessName: vendor.businessName || "",
+            image: vendor.image || "",
+          }
+        : null,
+    };
+  })
+);
+
+   res.status(200).json({
+  success: true,
+  totalServices: servicesWithVendor.length,
+  services: servicesWithVendor,
+});
   } catch (error) {
     console.error("Get public services failed:", error.message);
 

@@ -1,17 +1,23 @@
 
 import { client } from "../config/db.js";
+import { ObjectId } from "mongodb";
 
 export const verifyRole = (...allowedRoles) => {
   return async (req, res, next) => {
     try {
       const db = client.db(process.env.DB_NAME);
 
-      // MongoDB থেকে user খুঁজে বের করা
+      if (!ObjectId.isValid(req.user.sub)) {
+        return res.status(401).json({
+          success: false,
+          message: "Invalid user ID",
+        });
+      }
+
       const user = await db.collection("user").findOne({
-        id: req.user.sub,
+        _id: new ObjectId(req.user.sub),
       });
 
-      // User পাওয়া না গেলে
       if (!user) {
         return res.status(401).json({
           success: false,
@@ -19,7 +25,6 @@ export const verifyRole = (...allowedRoles) => {
         });
       }
 
-      // User blocked কি না
       if (user.isBlocked === true) {
         return res.status(403).json({
           success: false,
@@ -27,7 +32,6 @@ export const verifyRole = (...allowedRoles) => {
         });
       }
 
-      // User-এর role অনুমোদিত কি না
       if (!allowedRoles.includes(user.role)) {
         return res.status(403).json({
           success: false,
@@ -35,7 +39,6 @@ export const verifyRole = (...allowedRoles) => {
         });
       }
 
-      // Database-এর বর্তমান role সংরক্ষণ
       req.user.role = user.role;
 
       next();

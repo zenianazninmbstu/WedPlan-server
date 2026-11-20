@@ -24,6 +24,23 @@ router.get(
   getPublicServices
 );
 
+// Get pending services (Admin only)
+router.get(
+  "/pending",
+  verifyToken,
+  verifyRole("admin"),
+  getPendingServices
+);
+
+
+  // Get vendor's own services (Vendor only)
+router.get(
+  "/vendor/my-services",
+  verifyToken,
+  verifyRole("vendor"),
+  getVendorServices
+);
+
 // Get public service details
 router.get(
   "/:serviceId",
@@ -46,13 +63,7 @@ router.post(
   createService
 );
 
-// Get pending services (Admin only)
-router.get(
-  "/pending",
-  verifyToken,
-  verifyRole("admin"),
-  getPendingServices
-);
+
 
 // Delete own service (Vendor only)
 router.delete(
@@ -87,12 +98,6 @@ router.delete(
 );
 
 
-  // Get vendor's own services (Vendor only)
-router.get(
-  "/vendor/my-services",
-  verifyToken,
-  verifyRole("vendor"),
-  getVendorServices
-);
+
 
 export default router;

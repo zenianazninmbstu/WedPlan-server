@@ -1,19 +1,16 @@
 
 import { client } from "../config/db.js";
+import { ObjectId } from "mongodb";
 
 export const getAllUsers = async (req, res) => {
   try {
     const db = client.db(process.env.DB_NAME);
-
     const { search, role, status } = req.query;
 
     const filter = {};
 
     if (search) {
-     const safeSearch = search.replace(
-             /[.*+?^${}()|[\]\\]/g,
-             "\\$&"
-      );
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
       filter.$or = [
         { name: { $regex: safeSearch, $options: "i" } },
@@ -34,8 +31,7 @@ export const getAllUsers = async (req, res) => {
     const users = await db.collection("user")
       .find(filter)
       .project({
-        _id: 0,
-        id: 1,
+        _id: 1,
         name: 1,
         email: 1,
         image: 1,
@@ -47,47 +43,56 @@ export const getAllUsers = async (req, res) => {
       })
       .toArray();
 
+    const formattedUsers = users.map(({ _id, ...user }) => ({
+      ...user,
+      id: _id.toString(),
+    }));
+
     res.status(200).json({
       success: true,
-      totalUsers: users.length,
-      users,
+      totalUsers: formattedUsers.length,
+      users: formattedUsers,
     });
   } catch (error) {
-    console.error("Get users failed:", error.message);
-
+    console.error("Get users error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to retrieve users",
+      message: "Failed to fetch users",
     });
   }
 };
 
 export const updateUserStatus = async (req, res) => {
   try {
-    const db = client.db(process.env.DB_NAME);
     const { userId } = req.params;
-
-
     const { isBlocked } = req.body;
+
+    if (!ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
 
     if (typeof isBlocked !== "boolean") {
       return res.status(400).json({
         success: false,
-        message: "isBlocked must be true or false",
+        message: "Invalid account status",
       });
     }
-    
-    if (userId === req.user.sub && isBlocked === true) {
-  return res.status(403).json({
-    success: false,
-    message: "You cannot block your own account",
-  });
-}
-    
+
+    if (userId === req.user.sub && isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot block your own account",
+      });
+    }
+
+    const db = client.db(process.env.DB_NAME);
 
     const result = await db.collection("user").updateOne(
       {
-        id: userId,
+        _id: new ObjectId(userId),
         role: { $in: ["customer", "vendor"] },
       },
       {
@@ -112,8 +117,7 @@ export const updateUserStatus = async (req, res) => {
         : "User unblocked successfully",
     });
   } catch (error) {
-    console.error("Update user status failed:", error.message);
-
+    console.error("Update user status error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update user status",
@@ -123,14 +127,20 @@ export const updateUserStatus = async (req, res) => {
 
 export const getMyProfile = async (req, res) => {
   try {
+    if (!ObjectId.isValid(req.user.sub)) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
+
     const db = client.db(process.env.DB_NAME);
 
     const user = await db.collection("user").findOne(
-      { id: req.user.sub },
+      { _id: new ObjectId(req.user.sub) },
       {
         projection: {
-          _id: 0,
-          id: 1,
+          _id: 1,
           name: 1,
           email: 1,
           image: 1,
@@ -146,31 +156,38 @@ export const getMyProfile = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User profile not found",
+        message: "User not found",
       });
     }
 
+    const { _id, ...profile } = user;
+
     res.status(200).json({
       success: true,
-      user,
+      user: {
+        ...profile,
+        id: _id.toString(),
+      },
     });
   } catch (error) {
-    console.error("Get profile failed:", error.message);
-
+    console.error("Get profile error:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to retrieve profile",
+      message: "Failed to fetch profile",
     });
   }
 };
 
-
 export const updateMyProfile = async (req, res) => {
   try {
-    const db = client.db(process.env.DB_NAME);
+    if (!ObjectId.isValid(req.user.sub)) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
 
     const { name, image, businessName } = req.body;
-
     const updateData = {};
 
     if (name !== undefined) {
@@ -188,7 +205,7 @@ export const updateMyProfile = async (req, res) => {
       if (typeof image !== "string") {
         return res.status(400).json({
           success: false,
-          message: "Invalid profile image",
+          message: "Invalid image",
         });
       }
 
@@ -196,13 +213,10 @@ export const updateMyProfile = async (req, res) => {
     }
 
     if (businessName !== undefined) {
-      if (
-        typeof businessName !== "string" ||
-        !businessName.trim()
-      ) {
+      if (typeof businessName !== "string") {
         return res.status(400).json({
           success: false,
-          message: "Business name is required",
+          message: "Invalid business name",
         });
       }
 
@@ -212,21 +226,23 @@ export const updateMyProfile = async (req, res) => {
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({
         success: false,
-        message: "No profile information provided",
+        message: "No profile changes provided",
       });
     }
 
     updateData.updatedAt = new Date();
 
+    const db = client.db(process.env.DB_NAME);
+
     const result = await db.collection("user").updateOne(
-      { id: req.user.sub },
+      { _id: new ObjectId(req.user.sub) },
       { $set: updateData }
     );
 
     if (result.matchedCount === 0) {
       return res.status(404).json({
         success: false,
-        message: "User profile not found",
+        message: "User not found",
       });
     }
 
@@ -235,8 +251,7 @@ export const updateMyProfile = async (req, res) => {
       message: "Profile updated successfully",
     });
   } catch (error) {
-    console.error("Update profile failed:", error.message);
-
+    console.error("Update profile error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update profile",

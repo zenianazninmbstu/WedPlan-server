@@ -10,6 +10,13 @@ export const uploadImage = async (req, res) => {
       });
     }
 
+    if (!process.env.IMGBB_API_KEY) {
+  return res.status(500).json({
+    success: false,
+    message: "Image upload configuration is missing",
+  });
+}
+
     const formData = new FormData();
 
     formData.append("image", req.file.buffer.toString("base64"));

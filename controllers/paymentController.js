@@ -1,14 +1,21 @@
+
 import { stripe } from "../config/stripe.js";
 import { client } from "../config/db.js";
-
-
+import { ObjectId } from "mongodb";
 
 export const createCheckoutSession = async (req, res) => {
   try {
+    if (!ObjectId.isValid(req.user.sub)) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
+
     const db = client.db(process.env.DB_NAME);
 
     const user = await db.collection("user").findOne({
-      id: req.user.sub,
+      _id: new ObjectId(req.user.sub),
     });
 
     if (!user) {
@@ -36,6 +43,8 @@ export const createCheckoutSession = async (req, res) => {
       });
     }
 
+    const userId = user._id.toString();
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       payment_method_types: ["card"],
@@ -55,13 +64,13 @@ export const createCheckoutSession = async (req, res) => {
         },
       ],
       metadata: {
-  userId: user.id,
-},
-subscription_data: {
-  metadata: {
-    userId: user.id,
-  },
-},
+        userId,
+      },
+      subscription_data: {
+        metadata: {
+          userId,
+        },
+      },
       success_url: `${process.env.CLIENT_URL}/dashboard/vendor?payment=success`,
       cancel_url: `${process.env.CLIENT_URL}/dashboard/vendor?payment=cancelled`,
     });
@@ -82,7 +91,6 @@ subscription_data: {
 
 export const handleStripeWebhook = async (req, res) => {
   const signature = req.headers["stripe-signature"];
-
   let event;
 
   try {
@@ -93,11 +101,12 @@ export const handleStripeWebhook = async (req, res) => {
     );
   } catch (error) {
     console.error("Webhook signature verification failed:", error.message);
-
     return res.status(400).send("Invalid webhook signature");
   }
 
   try {
+    const db = client.db(process.env.DB_NAME);
+
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
 
@@ -108,28 +117,22 @@ export const handleStripeWebhook = async (req, res) => {
       const userId = session.metadata?.userId;
       const subscriptionId = session.subscription;
 
-      if (!userId || !subscriptionId) {
+      if (!userId || !ObjectId.isValid(userId) || !subscriptionId) {
         return res.status(400).json({
           success: false,
-          message: "Subscription information is missing",
+          message: "Subscription information is missing or invalid",
         });
       }
 
-      const subscription = await stripe.subscriptions.retrieve(
-        subscriptionId
-      );
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
-      if (subscription.status !== "active" && subscription.status !== "trialing") {
+      if (!["active", "trialing"].includes(subscription.status)) {
         return res.status(200).json({ received: true });
       }
 
-      const db = client.db(process.env.DB_NAME);
-
-      const transactionsCollection = db.collection("transactions");
-
       await db.collection("user").updateOne(
         {
-          id: userId,
+          _id: new ObjectId(userId),
           role: "vendor",
         },
         {
@@ -144,10 +147,9 @@ export const handleStripeWebhook = async (req, res) => {
           },
         }
       );
-            await transactionsCollection.updateOne(
-        {
-          stripeSessionId: session.id,
-        },
+
+      await db.collection("transactions").updateOne(
+        { stripeSessionId: session.id },
         {
           $setOnInsert: {
             vendorId: userId,
@@ -157,29 +159,22 @@ export const handleStripeWebhook = async (req, res) => {
             amount: (session.amount_total || 0) / 100,
             currency: session.currency,
             paymentStatus: session.payment_status,
-            status:
-              session.payment_status === "paid"
-                ? "paid"
-                : "pending",
+            status: session.payment_status === "paid" ? "paid" : "pending",
             createdAt: new Date(),
           },
         },
-        {
-          upsert: true,
-        }
+        { upsert: true }
       );
     }
 
-        if (event.type === "customer.subscription.deleted") {
+    if (event.type === "customer.subscription.deleted") {
       const subscription = event.data.object;
       const userId = subscription.metadata?.userId;
 
-      if (userId) {
-        const db = client.db(process.env.DB_NAME);
-
+      if (userId && ObjectId.isValid(userId)) {
         await db.collection("user").updateOne(
           {
-            id: userId,
+            _id: new ObjectId(userId),
             role: "vendor",
             stripeSubscriptionId: subscription.id,
           },
@@ -194,45 +189,37 @@ export const handleStripeWebhook = async (req, res) => {
       }
     }
 
-
-        if (event.type === "customer.subscription.updated") {
+    if (event.type === "customer.subscription.updated") {
       const subscription = event.data.object;
       const userId = subscription.metadata?.userId;
 
-      if (userId) {
-        const isActive =
-          subscription.status === "active" ||
-          subscription.status === "trialing";
+      if (userId && ObjectId.isValid(userId)) {
+        const isActive = ["active", "trialing"].includes(subscription.status);
 
-        await client.db(process.env.DB_NAME)
-          .collection("user")
-          .updateOne(
-            {
-              id: userId,
-              role: "vendor",
-              stripeSubscriptionId: subscription.id,
+        await db.collection("user").updateOne(
+          {
+            _id: new ObjectId(userId),
+            role: "vendor",
+            stripeSubscriptionId: subscription.id,
+          },
+          {
+            $set: {
+              subscriptionPlan: isActive ? "premium" : "free",
+              subscriptionExpiresAt: isActive
+                ? new Date(subscription.current_period_end * 1000)
+                : null,
+              updatedAt: new Date(),
             },
-            {
-              $set: {
-                subscriptionPlan: isActive ? "premium" : "free",
-                subscriptionExpiresAt: isActive
-                  ? new Date(subscription.current_period_end * 1000)
-                  : null,
-                updatedAt: new Date(),
-              },
-            }
-          );
+          }
+        );
       }
     }
 
-
-        if (event.type === "invoice.paid") {
+    if (event.type === "invoice.paid") {
       const invoice = event.data.object;
       const subscriptionId = invoice.subscription;
 
       if (subscriptionId) {
-        const db = client.db(process.env.DB_NAME);
-
         const user = await db.collection("user").findOne({
           stripeSubscriptionId: subscriptionId,
           role: "vendor",
@@ -243,7 +230,7 @@ export const handleStripeWebhook = async (req, res) => {
             { stripeInvoiceId: invoice.id },
             {
               $setOnInsert: {
-                vendorId: user.id,
+                vendorId: user._id.toString(),
                 stripeInvoiceId: invoice.id,
                 stripeSubscriptionId: subscriptionId,
                 amount: invoice.amount_paid / 100,
