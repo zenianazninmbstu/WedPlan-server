@@ -12,6 +12,7 @@ import {
    deleteVendorService,
      getPublicServices,
      getPublicServiceDetails,
+      updateVendorServiceAvailability,
 } from "../controllers/serviceController.js";
 
 
@@ -63,6 +64,13 @@ router.post(
   createService
 );
 
+// Vendor turns an approved service on or off (Vendor only)
+router.patch(
+  "/vendor/:serviceId/availability",
+  verifyToken,
+  verifyRole("vendor"),
+  updateVendorServiceAvailability
+);
 
 
 // Delete own service (Vendor only)

@@ -212,10 +212,10 @@ export const cancelBooking = async (req, res) => {
   }
 };
 
+
 export const getVendorBookings = async (req, res) => {
   try {
     const db = client.db(process.env.DB_NAME);
-
     const bookings = await db.collection("bookings")
       .aggregate([
         {
@@ -238,6 +238,50 @@ export const getVendorBookings = async (req, res) => {
           },
         },
         {
+          $lookup: {
+            from: "user",
+            let: { customerId: "$customerId" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: [
+                      { $toString: "$_id" },
+                      "$$customerId",
+                    ],
+                  },
+                },
+              },
+              {
+                $project: {
+                  name: 1,
+                  email: 1,
+                },
+              },
+            ],
+            as: "customer",
+          },
+        },
+        {
+          $unwind: {
+            path: "$customer",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $addFields: {
+            customerName: {
+              $ifNull: ["$customer.name", "Customer"],
+            },
+            customerEmail: {
+              $ifNull: ["$customer.email", ""],
+            },
+            serviceName: {
+              $ifNull: ["$service.name", "Service"],
+            },
+          },
+        },
+        {
           $sort: {
             createdAt: -1,
           },
@@ -251,14 +295,15 @@ export const getVendorBookings = async (req, res) => {
       bookings,
     });
   } catch (error) {
-    console.error("Get vendor bookings failed:", error.message);
+    console.error("Get vendor bookings error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to retrieve booking requests",
+      message: "Failed to fetch booking requests.",
     });
   }
 };
+
 
 export const updateBookingStatus = async (req, res) => {
   try {

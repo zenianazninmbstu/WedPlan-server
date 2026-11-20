@@ -613,3 +613,101 @@ export const getPublicServiceDetails = async (req, res) => {
     });
   }
 };
+
+// Vendor turns ONE of their own approved services on or off
+export const updateVendorServiceAvailability = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const { serviceId } = req.params;
+    const { isActive } = req.body;
+
+    // 1. Check the service id
+    if (!ObjectId.isValid(serviceId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid service ID",
+      });
+    }
+
+    // 2. isActive must be true or false
+    if (typeof isActive !== "boolean") {
+      return res.status(400).json({
+        success: false,
+        message: "isActive must be true or false",
+      });
+    }
+
+    // 3. Find the service. It must belong to this vendor and be approved
+    const service = await db.collection("services").findOne({
+      _id: new ObjectId(serviceId),
+      vendorId: req.user.sub,
+      status: "approved",
+    });
+
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: "Approved service not found",
+      });
+    }
+
+    // 4. If the vendor wants to turn it ON, check the Free plan limit
+    if (isActive && !service.isActive) {
+      const vendor = ObjectId.isValid(req.user.sub)
+        ? await db.collection("user").findOne({
+            _id: new ObjectId(req.user.sub),
+          })
+        : null;
+
+      if (!vendor) {
+        return res.status(404).json({
+          success: false,
+          message: "Vendor not found",
+        });
+      }
+
+      // Premium means: plan is premium AND it has not expired
+      const isPremium =
+        vendor.subscriptionPlan === "premium" &&
+        vendor.subscriptionExpiresAt &&
+        new Date(vendor.subscriptionExpiresAt) > new Date();
+
+      if (!isPremium) {
+        const activeServices = await db.collection("services").countDocuments({
+          vendorId: req.user.sub,
+          status: "approved",
+          isActive: true,
+        });
+
+        if (activeServices >= 3) {
+          return res.status(403).json({
+            success: false,
+            message:
+              "Free vendors can have only 3 active services. Upgrade to Premium for unlimited services.",
+          });
+        }
+      }
+    }
+
+    // 5. Save the new value
+    await db.collection("services").updateOne(
+      { _id: new ObjectId(serviceId), vendorId: req.user.sub },
+      { $set: { isActive, updatedAt: new Date() } }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: isActive
+        ? "Service is now available to customers."
+        : "Service is now marked as unavailable.",
+    });
+  } catch (error) {
+    console.error("Update vendor availability failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update availability",
+    });
+  }
+};
