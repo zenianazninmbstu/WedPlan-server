@@ -1,3 +1,4 @@
+
 import "dotenv/config";
 import { MongoClient } from "mongodb";
 
@@ -9,22 +10,30 @@ const client = new MongoClient(uri, {
 });
 
 let db;
+let connectionPromise;
 
 const connectDB = async () => {
-  try {
-    await client.connect();
+  if (db) return db;
 
-    db = client.db(dbName);
+  if (!connectionPromise) {
+    connectionPromise = client
+      .connect()
+      .then(async () => {
+        db = client.db(dbName);
+        await db.admin().ping();
 
-    await db.admin().ping();
+        console.log("MongoDB connected successfully!");
 
-    console.log("MongoDB connected successfully!");
-
-    return db;
-  } catch (error) {
-    console.error("MongoDB connection failed:", error.message);
-    process.exit(1);
+        return db;
+      })
+      .catch((error) => {
+        connectionPromise = null;
+        console.error("MongoDB connection failed:", error.message);
+        throw error;
+      });
   }
+
+  return connectionPromise;
 };
 
 export { connectDB, client };

@@ -16,14 +16,44 @@ import uploadRoutes from "./routes/uploadRoutes.js";
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Allowed client URLs
+const allowedOrigins = [
+  "http://localhost:3000",
+  ...(process.env.CLIENT_URL || "")
+    .split(",")
+    .map((url) => url.trim())
+    .filter(Boolean),
+];
+
 // CORS configuration
 app.use(
   cors({
-    origin: "http://localhost:3000",
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
   })
 );
+
+// Ensure MongoDB is connected before handling requests
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("Database connection error:", error.message);
+
+    res.status(503).json({
+      success: false,
+      message: "Database connection failed",
+    });
+  }
+});
 
 // Better Auth route
 app.all("/api/auth/*splat", toNodeHandler(auth));
@@ -37,6 +67,8 @@ app.post(
 
 // Body parser
 app.use(express.json());
+
+// User routes
 app.use("/api/users", userRoutes);
 app.use("/api/services", serviceRoutes);
 
@@ -59,18 +91,18 @@ app.get("/", (req, res) => {
   res.send("WedPlan Server is running!");
 });
 
-// Start server after database connection
-const startServer = async () => {
-  try {
-    await connectDB();
+// Export Express app for Vercel
+export default app;
 
-    app.listen(PORT, () => {
-      console.log(`WedPlan server running on port ${PORT}`);
+// Start local server only outside Vercel
+if (!process.env.VERCEL) {
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`WedPlan server running on port ${PORT}`);
+      });
+    })
+    .catch((error) => {
+      console.error("Server startup failed:", error.message);
     });
-  } catch (error) {
-    console.error("Server startup failed:", error.message);
-    process.exit(1);
-  }
-};
-
-startServer();
+}
