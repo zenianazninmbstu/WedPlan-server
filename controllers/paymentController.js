@@ -157,6 +157,7 @@ export const handleStripeWebhook = async (req, res) => {
             stripeSubscriptionId: subscriptionId,
             stripeCustomerId: session.customer,
             amount: (session.amount_total || 0) / 100,
+            plan: "premium",
             currency: session.currency,
             paymentStatus: session.payment_status,
             status: session.payment_status === "paid" ? "paid" : "pending",
@@ -234,6 +235,7 @@ export const handleStripeWebhook = async (req, res) => {
                 stripeInvoiceId: invoice.id,
                 stripeSubscriptionId: subscriptionId,
                 amount: invoice.amount_paid / 100,
+                plan: "premium",
                 currency: invoice.currency,
                 paymentStatus: "paid",
                 status: "paid",
@@ -257,14 +259,60 @@ export const handleStripeWebhook = async (req, res) => {
   }
 };
 
+
 export const getAllTransactions = async (req, res) => {
   try {
     const db = client.db(process.env.DB_NAME);
 
     const transactions = await db
       .collection("transactions")
-      .find({})
-      .sort({ createdAt: -1 })
+      .aggregate([
+        {
+          $addFields: {
+            vendorObjectId: {
+              $convert: {
+                input: "$vendorId",
+                to: "objectId",
+                onError: null,
+                onNull: null,
+              },
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: "user",
+            localField: "vendorObjectId",
+            foreignField: "_id",
+            as: "vendorData",
+          },
+        },
+        {
+          $unwind: {
+            path: "$vendorData",
+            preserveNullAndEmptyArrays: true,
+          },
+        },
+        {
+          $project: {
+            vendorId: 1,
+            vendor: {
+              name: "$vendorData.name",
+              email: "$vendorData.email",
+            },
+            plan: { $ifNull: ["$plan", "premium"] },
+            amount: 1,
+            currency: 1,
+            status: { $ifNull: ["$status", "$paymentStatus"] },
+            createdAt: 1,
+            stripeSessionId: 1,
+            stripeInvoiceId: 1,
+          },
+        },
+        {
+          $sort: { createdAt: -1 },
+        },
+      ])
       .toArray();
 
     res.status(200).json({
