@@ -27,20 +27,19 @@ export const getPendingServices = async (req, res) => {
   }
 };
 
+
 export const updateServiceStatus = async (req, res) => {
   try {
     const db = client.db(process.env.DB_NAME);
-
     const { serviceId } = req.params;
     const { status } = req.body;
 
-
     if (!ObjectId.isValid(serviceId)) {
-  return res.status(400).json({
-    success: false,
-    message: "Invalid service ID",
-  });
-}
+      return res.status(400).json({
+        success: false,
+        message: "Invalid service ID",
+      });
+    }
 
     if (!["approved", "rejected"].includes(status)) {
       return res.status(400).json({
@@ -49,25 +48,40 @@ export const updateServiceStatus = async (req, res) => {
       });
     }
 
-    const result = await db.collection("services").updateOne(
-      {
+    const service = await db.collection("services").findOne({
       _id: new ObjectId(serviceId),
-        status: "pending",
-      },
+    });
+
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: "Service not found",
+      });
+    }
+
+    // Pending services can be approved or rejected.
+    // Published services can be rejected by admin.
+    const canUpdate =
+      service.status === "pending" ||
+      (service.status === "approved" && status === "rejected");
+
+    if (!canUpdate) {
+      return res.status(400).json({
+        success: false,
+        message: "This service status cannot be changed.",
+      });
+    }
+
+    await db.collection("services").updateOne(
+      { _id: new ObjectId(serviceId) },
       {
         $set: {
           status,
+          isActive: false,
           updatedAt: new Date(),
         },
       }
     );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Pending service not found",
-      });
-    }
 
     res.status(200).json({
       success: true,
@@ -708,6 +722,57 @@ export const updateVendorServiceAvailability = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update availability",
+    });
+  }
+};
+
+export const getAllServices = async (req, res) => {
+  try {
+    const db = client.db(process.env.DB_NAME);
+
+    const services = await db.collection("services")
+      .find({})
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    const servicesWithVendor = await Promise.all(
+      services.map(async (service) => {
+        const vendor = ObjectId.isValid(service.vendorId)
+          ? await db.collection("user").findOne(
+              { _id: new ObjectId(service.vendorId) },
+              {
+                projection: {
+                  _id: 0,
+                  name: 1,
+                  email: 1,
+                },
+              }
+            )
+          : null;
+
+        return {
+          ...service,
+          vendor: vendor
+            ? {
+                name: vendor.name || "Wedding Vendor",
+                email: vendor.email || "No email available",
+              }
+            : null,
+        };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      totalServices: servicesWithVendor.length,
+      services: servicesWithVendor,
+    });
+  } catch (error) {
+    console.error("Get all services failed:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve services",
     });
   }
 };

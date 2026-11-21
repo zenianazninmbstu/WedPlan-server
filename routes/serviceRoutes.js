@@ -13,6 +13,7 @@ import {
      getPublicServices,
      getPublicServiceDetails,
       updateVendorServiceAvailability,
+      getAllServices,
 } from "../controllers/serviceController.js";
 
 
@@ -23,6 +24,14 @@ const router = express.Router();
 router.get(
   "/",
   getPublicServices
+);
+
+// Get all services (Admin only)
+router.get(
+  "/admin/all",
+  verifyToken,
+  verifyRole("admin"),
+  getAllServices
 );
 
 // Get pending services (Admin only)
