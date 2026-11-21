@@ -11,6 +11,12 @@ import { createAuthMiddleware, APIError } from "better-auth/api";
 
 const db = client.db(process.env.DB_NAME);
 
+let resolveAdminResetToken;
+
+export const adminResetTokenPromise = new Promise((resolve) => {
+  resolveAdminResetToken = resolve;
+});
+
 export const auth = betterAuth({
   database: mongodbAdapter(db, {
     client,
@@ -23,11 +29,15 @@ export const auth = betterAuth({
   process.env.CLIENT_URL || "http://localhost:3000",
 ],
 
-  emailAndPassword: {
-    enabled: true,
-    minPasswordLength: 6,
-  },
+ emailAndPassword: {
+  enabled: true,
+  minPasswordLength: 6,
 
+ sendResetPassword: async ({ token }) => {
+  resolveAdminResetToken(token);
+  console.log("Admin password reset link generated.");
+},
+},
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID,
