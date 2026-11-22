@@ -5,6 +5,7 @@ import { ObjectId } from "mongodb";
 
 export const createCheckoutSession = async (req, res) => {
   try {
+    
     if (!ObjectId.isValid(req.user.sub)) {
       return res.status(401).json({
         success: false,
@@ -47,7 +48,6 @@ export const createCheckoutSession = async (req, res) => {
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
-      payment_method_types: ["card"],
       line_items: [
         {
           price_data: {
@@ -71,8 +71,8 @@ export const createCheckoutSession = async (req, res) => {
           userId,
         },
       },
-      success_url: `${process.env.CLIENT_URL}/dashboard/vendor?payment=success`,
-      cancel_url: `${process.env.CLIENT_URL}/dashboard/vendor?payment=cancelled`,
+      success_url: `${process.env.CLIENT_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.CLIENT_URL}/payment/cancel`,
     });
 
     res.status(200).json({
@@ -80,7 +80,7 @@ export const createCheckoutSession = async (req, res) => {
       url: session.url,
     });
   } catch (error) {
-    console.error("Create checkout session failed:", error.message);
+   console.error("Create checkout session failed:", error);
 
     res.status(500).json({
       success: false,
@@ -139,8 +139,8 @@ export const handleStripeWebhook = async (req, res) => {
           $set: {
             subscriptionPlan: "premium",
             subscriptionExpiresAt: new Date(
-              subscription.current_period_end * 1000
-            ),
+           subscription.items.data[0].current_period_end * 1000
+              ),
             stripeCustomerId: session.customer,
             stripeSubscriptionId: subscriptionId,
             updatedAt: new Date(),
@@ -206,9 +206,12 @@ export const handleStripeWebhook = async (req, res) => {
           {
             $set: {
               subscriptionPlan: isActive ? "premium" : "free",
-              subscriptionExpiresAt: isActive
-                ? new Date(subscription.current_period_end * 1000)
-                : null,
+             subscriptionExpiresAt: isActive
+
+             ? new Date(
+             subscription.items.data[0].current_period_end * 1000
+             )
+             : null,
               updatedAt: new Date(),
             },
           }
