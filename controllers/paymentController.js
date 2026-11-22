@@ -332,3 +332,73 @@ export const getAllTransactions = async (req, res) => {
     });
   }
 };
+
+
+export const getMySubscription = async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.user.sub)) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
+
+    const db = client.db(process.env.DB_NAME);
+
+    // Get the logged-in vendor's subscription
+    const user = await db.collection("user").findOne(
+      {
+        _id: new ObjectId(req.user.sub),
+        role: "vendor",
+      },
+      {
+        projection: {
+          subscriptionPlan: 1,
+          subscriptionExpiresAt: 1,
+        },
+      }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found",
+      });
+    }
+
+    // Get only the logged-in vendor's payment records
+    const transactions = await db
+      .collection("transactions")
+      .find({
+        vendorId: req.user.sub,
+      })
+      .project({
+        _id: 1,
+        plan: 1,
+        amount: 1,
+        currency: 1,
+        status: 1,
+        paymentStatus: 1,
+        createdAt: 1,
+      })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    return res.status(200).json({
+      success: true,
+      subscription: {
+        plan: user.subscriptionPlan || "free",
+        expiresAt: user.subscriptionExpiresAt || null,
+      },
+      transactions,
+    });
+  } catch (error) {
+    console.error("Get vendor subscription failed:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get subscription details",
+    });
+  }
+};
+

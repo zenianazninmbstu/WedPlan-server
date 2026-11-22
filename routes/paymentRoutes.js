@@ -1,6 +1,7 @@
 import express from "express";
 import { createCheckoutSession,
          getAllTransactions,
+           getMySubscription,
 } from "../controllers/paymentController.js";
 import { verifyToken } from "../middleware/verifyToken.js";
 import { verifyRole } from "../middleware/verifyRole.js";
@@ -13,6 +14,13 @@ router.post(
   verifyToken,
   verifyRole("vendor"),
   createCheckoutSession
+);
+
+router.get(
+  "/my-subscription",
+  verifyToken,
+  verifyRole("vendor"),
+  getMySubscription
 );
 
 router.get(
