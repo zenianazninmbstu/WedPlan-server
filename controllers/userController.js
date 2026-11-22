@@ -146,6 +146,9 @@ export const getMyProfile = async (req, res) => {
           image: 1,
           role: 1,
           businessName: 1,
+          phone: 1,
+          location: 1,
+          bio: 1,
           subscriptionPlan: 1,
           subscriptionExpiresAt: 1,
           createdAt: 1,
@@ -178,6 +181,7 @@ export const getMyProfile = async (req, res) => {
   }
 };
 
+
 export const updateMyProfile = async (req, res) => {
   try {
     if (!ObjectId.isValid(req.user.sub)) {
@@ -187,40 +191,67 @@ export const updateMyProfile = async (req, res) => {
       });
     }
 
-    const { name, image, businessName } = req.body;
+    const { name, image, businessName, phone, location, bio } = req.body;
     const updateData = {};
 
     if (name !== undefined) {
-      if (typeof name !== "string" || !name.trim()) {
+      if (typeof name !== "string" || !name.trim() || name.trim().length > 100) {
         return res.status(400).json({
           success: false,
-          message: "Name is required",
+          message: "Name must be between 1 and 100 characters",
         });
       }
-
       updateData.name = name.trim();
     }
 
     if (image !== undefined) {
-      if (typeof image !== "string") {
+      if (typeof image !== "string" || image.length > 2000) {
         return res.status(400).json({
           success: false,
           message: "Invalid image",
         });
       }
-
       updateData.image = image.trim();
     }
 
     if (businessName !== undefined) {
-      if (typeof businessName !== "string") {
+      if (typeof businessName !== "string" || businessName.length > 150) {
         return res.status(400).json({
           success: false,
           message: "Invalid business name",
         });
       }
-
       updateData.businessName = businessName.trim();
+    }
+
+    if (phone !== undefined) {
+      if (typeof phone !== "string" || phone.length > 30) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid phone number",
+        });
+      }
+      updateData.phone = phone.trim();
+    }
+
+    if (location !== undefined) {
+      if (typeof location !== "string" || location.length > 150) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid location",
+        });
+      }
+      updateData.location = location.trim();
+    }
+
+    if (bio !== undefined) {
+      if (typeof bio !== "string" || bio.length > 300) {
+        return res.status(400).json({
+          success: false,
+          message: "Bio cannot exceed 300 characters",
+        });
+      }
+      updateData.bio = bio.trim();
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -258,3 +289,4 @@ export const updateMyProfile = async (req, res) => {
     });
   }
 };
+
