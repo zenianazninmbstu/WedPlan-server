@@ -130,23 +130,33 @@ export const handleStripeWebhook = async (req, res) => {
         return res.status(200).json({ received: true });
       }
 
-      await db.collection("user").updateOne(
-        {
-          _id: new ObjectId(userId),
-          role: "vendor",
-        },
-        {
-          $set: {
-            subscriptionPlan: "premium",
-            subscriptionExpiresAt: new Date(
-           subscription.items.data[0].current_period_end * 1000
-              ),
-            stripeCustomerId: session.customer,
-            stripeSubscriptionId: subscriptionId,
-            updatedAt: new Date(),
-          },
-        }
-      );
+     const userUpdate = await db.collection("user").updateOne(
+  {
+    _id: new ObjectId(userId),
+    role: "vendor",
+  },
+  {
+    $set: {
+      subscriptionPlan: "premium",
+      subscriptionExpiresAt: new Date(
+        subscription.items.data[0].current_period_end * 1000
+      ),
+      stripeCustomerId: session.customer,
+      stripeSubscriptionId: subscriptionId,
+      updatedAt: new Date(),
+    },
+  }
+);
+
+// Stop if the vendor account was not found
+if (userUpdate.matchedCount === 0) {
+  console.error("Vendor not found for Stripe subscription:", userId);
+
+  return res.status(200).json({
+    received: true,
+    message: "Vendor account not found",
+  });
+}
 
       await db.collection("transactions").updateOne(
         { stripeSessionId: session.id },
