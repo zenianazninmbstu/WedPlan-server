@@ -5,6 +5,7 @@ import { createCheckoutSession,
 } from "../controllers/paymentController.js";
 import { verifyToken } from "../middleware/verifyToken.js";
 import { verifyRole } from "../middleware/verifyRole.js";
+import { getAdminStats } from "../controllers/adminController.js";
 
 const router = express.Router();
 
@@ -22,6 +23,23 @@ router.get(
   verifyRole("vendor"),
   getMySubscription
 );
+
+
+router.get(
+  "/transactions",
+  verifyToken,
+  verifyRole("admin"),
+  getAllTransactions
+);
+
+router.get(
+  "/admin-stats",
+  verifyToken,
+  verifyRole("admin"),
+  getAdminStats
+);
+
+
 
 router.get(
   "/transactions",
