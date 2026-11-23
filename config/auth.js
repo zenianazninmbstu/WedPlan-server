@@ -33,6 +33,13 @@ export const auth = betterAuth({
     .filter(Boolean),
 ],
 
+advanced: {
+  defaultCookieAttributes: {
+    sameSite: "none",
+    secure: true,
+  },
+},
+
  emailAndPassword: {
   enabled: true,
   minPasswordLength: 6,
