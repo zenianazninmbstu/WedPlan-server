@@ -91,6 +91,37 @@ app.get("/", (req, res) => {
   res.send("WedPlan Server is running!");
 });
 
+
+// Handle unknown routes
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "API route not found",
+  });
+});
+
+// Global error handler
+app.use((error, req, res, next) => {
+  console.error("API Error:", error);
+
+  if (res.headersSent) {
+    return next(error);
+  }
+
+  const statusCode =
+    error.statusCode ||
+    error.status ||
+    (error.message === "Not allowed by CORS" ? 403 : 500);
+
+  res.status(statusCode).json({
+    success: false,
+    message:
+      statusCode >= 500
+        ? "Internal server error"
+        : error.message || "Request failed",
+  });
+});
+
 // Export Express app for Vercel
 export default app;
 
