@@ -41,11 +41,6 @@ router.get(
 
 
 
-router.get(
-  "/transactions",
-  verifyToken,
-  verifyRole("admin"),
-  getAllTransactions
-);
+
 
 export default router;
